@@ -1,0 +1,56 @@
+﻿html, body {
+    height: 100%;
+    width: 100%;
+}
+
+
+.navbar {
+    overflow: hidden;
+    background-color: #333;
+    position: fixed;
+    top: 0;
+    width: 100%;
+}
+
+
+    .navbar a {
+        float: left;
+        display: block;
+        color: #f2f2f2;
+        text-align: center;
+        padding: 14px 16px;
+        text-decoration: none;
+    }
+
+.box {
+    border: 2px solid #666666;
+    border-radius: 5px;
+    padding: 20px;
+
+    display: inline-block;
+    margin: 20px;
+}
+
+li {
+    text-indent:50px;
+}
+
+.navbar a:hover {
+    background: #ddd;
+    color: black;
+}
+
+.home {
+    position: relative;
+    top: 100px;
+}
+
+.about {
+    position: relative;
+    top: 100px;
+}
+
+
+body {
+    font-family: "Lucida Console", monospace;
+}
