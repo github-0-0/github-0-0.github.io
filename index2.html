@@ -6,7 +6,8 @@
   <title>Practice Questions</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
   <style>
-    #question svg * {
+    #question svg *,
+    .question-copy svg * {
       fill: #cbcbcb !important;
       stroke: #cbcbcb !important;
     }
@@ -37,17 +38,21 @@
       margin-bottom: 20px;
       white-space: pre-wrap;
     }
-    #question svg {
+    #question svg,
+    .question-copy svg {
       display: block;
       max-width: 100%;
       height: auto;
     }
-    #question table {
+    #question table,
+    .question-copy table {
       border-collapse: collapse;
       max-width: 100%;
     }
     #question th,
-    #question td {
+    #question td,
+    .question-copy th,
+    .question-copy td {
       border: 1px solid #555;
       padding: 6px;
     }
@@ -136,7 +141,7 @@
       border: 1px solid #4b4b4b;
       border-radius: 4px;
       background: #242424;
-      color: #f1f1f1;
+      color: #cbcbcb;
     }
     #setup-panel {
       max-width: 520px;
@@ -165,10 +170,18 @@
       border: 1px solid #4b4b4b;
       border-radius: 6px;
       background: #242424;
-      color: #f1f1f1;
+      color: #cbcbcb;
     }
     #start-session {
       margin-top: 20px;
+      cursor: pointer;
+    }
+    #results-new-session {
+      padding: 9px 12px;
+      border: 1px solid #4b4b4b;
+      border-radius: 6px;
+      background: #242424;
+      color: #cbcbcb;
       cursor: pointer;
     }
     #setup-message {
@@ -176,6 +189,38 @@
       margin-top: 12px;
       color: #aaa;
     }
+    #results-panel {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    #results-summary {
+      margin-bottom: 24px;
+    }
+    .missed-question {
+      margin: 20px 0;
+      padding: 24px;
+      border: 1px solid #3d3d3d;
+      border-radius: 12px;
+      background: #1b1b1b;
+    }
+    .missed-question h2 {
+      margin: 0 0 8px;
+      color: #cbcbcb;
+      font-size: 1.1rem;
+    }
+    .missed-question .question-copy {
+      margin: 16px 0;
+      font-size: 1rem;
+    }
+    .answer-review {
+      margin: 12px 0 0;
+      padding: 12px;
+      border-radius: 6px;
+    }
+    .answer-review.your-answer { background: #54232d; }
+    .answer-review.correct-answer { background: #173f28; }
+    .answer-review strong { color: #cbcbcb; }
+    .rationale { margin-top: 16px; white-space: pre-wrap; }
     #session-header {
       justify-content: space-between;
       margin-bottom: 10px;
@@ -238,6 +283,12 @@
       <button id="next">Next</button>
     </section>
   </main>
+  <section id="results-panel" hidden aria-labelledby="results-title">
+    <h1 id="results-title">Session results</h1>
+    <p id="results-summary"></p>
+    <div id="missed-questions"></div>
+    <button id="results-new-session">Start a new session</button>
+  </section>
 
   <script>
 
@@ -260,6 +311,10 @@
     const newSessionBtn = document.getElementById("new-session");
     const setupMessage = document.getElementById("setup-message");
     const timer = document.getElementById("timer");
+    const resultsPanel = document.getElementById("results-panel");
+    const resultsSummary = document.getElementById("results-summary");
+    const missedQuestionsBox = document.getElementById("missed-questions");
+    const resultsNewSessionBtn = document.getElementById("results-new-session");
     let questions = [];
 
     function populateFilter(select, values) {
@@ -282,11 +337,13 @@
 
     let filteredQuestions = [];
     let order = shuffleIndices(filteredQuestions.length);
+    let lastSessionStart = [];
     let orderIndex = 0;
     let currentIndex = order[orderIndex];
     let score = 0;
     let answered = false;
     let selectedButtons = [];
+    let missedQuestions = [];
     let timerInterval;
     let sessionEndsAt = 0;
 
@@ -331,6 +388,7 @@
         feedback.textContent = "Correct!\n\n" + q.rationale;
         score++;
       } else {
+        missedQuestions.push({ question: q, selectedChoice: choice });
         button.classList.add("wrong");
         feedback.textContent =
           "Incorrect.\n\n" +
@@ -374,11 +432,28 @@
       if (!filteredQuestions.length) return false;
 
       score = 0;
+      missedQuestions = [];
       orderIndex = 0;
       const requestedCount = questionCount.value === "all"
         ? filteredQuestions.length
         : Number(questionCount.value);
-      order = shuffleIndices(filteredQuestions.length).slice(0, requestedCount);
+
+      // Avoid an identical opening run in back-to-back sessions. The shuffle is
+      // still random; this only rerolls the exceptionally unlikely repeat.
+      for (let attempt = 0; attempt < 10; attempt++) {
+        order = shuffleIndices(filteredQuestions.length).slice(0, requestedCount);
+        const openingRun = order.slice(0, Math.min(3, order.length));
+        const repeatsLastOpeningRun =
+          openingRun.length === lastSessionStart.length &&
+          openingRun.every((questionIndex, index) =>
+            filteredQuestions[questionIndex] === lastSessionStart[index]
+          );
+
+        if (!repeatsLastOpeningRun || openingRun.length < filteredQuestions.length) break;
+      }
+      lastSessionStart = order
+        .slice(0, Math.min(3, order.length))
+        .map(questionIndex => filteredQuestions[questionIndex]);
       currentIndex = order[orderIndex];
       nextBtn.style.display = "";
       return true;
@@ -413,13 +488,62 @@
 
     function finishSession(timedOut) {
       clearTimer();
-      meta.textContent = "";
-      questionBox.textContent = timedOut ? "Time's up!" : "Session complete!";
-      answersBox.innerHTML = "";
-      feedback.textContent = "";
-      nextBtn.style.display = "none";
       progress.textContent = `${timedOut ? "Time's up" : "Finished"}! Score: ${score}/${order.length}`;
       if (timedOut) timer.textContent = "Time: 00:00";
+      quizLayout.hidden = true;
+      resultsPanel.hidden = false;
+      renderResults(timedOut);
+    }
+
+    function choicesFor(question) {
+      return question.answers
+        .split(/\n\s*\n/)
+        .map(choice => choice.trim())
+        .filter(Boolean);
+    }
+
+    function renderResults(timedOut) {
+      const completed = timedOut ? "Time expired" : "Session complete";
+      resultsSummary.textContent = `${completed}: ${score} of ${order.length} correct. ${missedQuestions.length} question${missedQuestions.length === 1 ? "" : "s"} to review.`;
+      missedQuestionsBox.innerHTML = "";
+
+      if (!missedQuestions.length) {
+        const message = document.createElement("p");
+        message.textContent = score === order.length
+          ? "Perfect score — there are no missed questions to review."
+          : "There are no incorrect answers to review.";
+        missedQuestionsBox.appendChild(message);
+        return;
+      }
+
+      missedQuestions.forEach(({ question, selectedChoice }, index) => {
+        const choices = choicesFor(question);
+        const card = document.createElement("article");
+        card.className = "missed-question";
+
+        const heading = document.createElement("h2");
+        heading.textContent = `Missed question ${index + 1}`;
+        const details = document.createElement("div");
+        details.id = `missed-meta-${index}`;
+        details.textContent = `${question.domain} • ${question.skill} • ${question.difficulty}`;
+        const prompt = document.createElement("div");
+        prompt.className = "question-copy";
+        prompt.innerHTML = question.question;
+        const selected = document.createElement("div");
+        selected.className = "answer-review your-answer";
+        selected.innerHTML = `<strong>Your answer:</strong> ${String.fromCharCode(65 + selectedChoice)}. `;
+        selected.append(document.createTextNode(choices[selectedChoice]));
+        const correct = document.createElement("div");
+        correct.className = "answer-review correct-answer";
+        correct.innerHTML = `<strong>Correct answer:</strong> ${String.fromCharCode(65 + question.correct)}. `;
+        correct.append(document.createTextNode(choices[question.correct]));
+        const rationale = document.createElement("p");
+        rationale.className = "rationale";
+        rationale.textContent = question.rationale;
+
+        card.append(heading, details, prompt, selected, correct, rationale);
+        missedQuestionsBox.appendChild(card);
+      });
     }
 
     function startSession() {
@@ -427,6 +551,7 @@
       setupPanel.hidden = true;
       sessionHeader.hidden = false;
       quizLayout.hidden = false;
+      resultsPanel.hidden = true;
       loadQuestion();
       startTimer();
     }
@@ -436,6 +561,7 @@
       setupPanel.hidden = false;
       sessionHeader.hidden = true;
       quizLayout.hidden = true;
+      resultsPanel.hidden = true;
       updateSetupMessage();
     }
 
@@ -443,6 +569,7 @@
     domainFilter.onchange = updateSetupMessage;
     startSessionBtn.onclick = startSession;
     newSessionBtn.onclick = returnToMenu;
+    resultsNewSessionBtn.onclick = returnToMenu;
 
     async function loadQuestions() {
       try {
