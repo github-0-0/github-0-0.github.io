@@ -65,11 +65,12 @@
       const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = `${question.domain} • ${question.skill} • ${question.difficulty} • ${stats.attempts} attempt${stats.attempts === 1 ? "" : "s"} • ${Math.round((stats.attempts ? stats.correct / stats.attempts : 0) * 100)}% correct`;
       const prompt = document.createElement("div"); prompt.className = "prompt"; prompt.innerHTML = question.question;
       card.append(title, meta, prompt);
-      if (activeList === "missed") {
+      if (activeList === "missed" || record) {
         const choices = choicesFor(question);
-        const selectedChoice = Number(record?.selectedChoice);
-        if (Number.isInteger(selectedChoice) && choices[selectedChoice]) {
-          const selected = document.createElement("div"); selected.className = "answer your-answer"; selected.textContent = `Your answer: ${String.fromCharCode(65 + selectedChoice)}. ${choices[selectedChoice]}`; card.appendChild(selected);
+        const selectedChoices = Array.isArray(record?.selectedChoices) ? record.selectedChoices : (Array.isArray(record?.attempts) ? record.attempts.map(attempt => attempt.selectedChoice) : [record?.selectedChoice]);
+        const validChoices = selectedChoices.map(Number).filter(selectedChoice => Number.isInteger(selectedChoice) && choices[selectedChoice]);
+        if (validChoices.length) {
+          const selected = document.createElement("div"); selected.className = "answer your-answer"; selected.textContent = `${validChoices.length === 1 ? "Your answer" : "Your attempts"}: ${validChoices.map(selectedChoice => `${String.fromCharCode(65 + selectedChoice)}. ${choices[selectedChoice]}`).join(" | ")}`; card.appendChild(selected);
         }
         const correct = document.createElement("div"); correct.className = "answer correct-answer"; correct.textContent = `Correct answer: ${String.fromCharCode(65 + question.correct)}. ${choices[question.correct]}`;
         const rationale = document.createElement("p"); rationale.className = "rationale"; rationale.textContent = question.rationale;
@@ -95,7 +96,7 @@
           const answered = Object.keys(session.answers || {}).length;
           summary.textContent = `${date} — ${session.score || 0}/${session.questionIds?.length || 0} correct • ${answered} answered${session.timedOut ? " • timed out" : ""}`;
           group.appendChild(summary);
-          (session.questionIds || []).map(id => questionsById.get(id)).filter(Boolean).forEach(question => group.appendChild(makeCard(question)));
+          (session.questionIds || []).map(id => questionsById.get(id)).filter(Boolean).forEach(question => group.appendChild(makeCard(question, (session.answers || {})[question.id])));
           list.appendChild(group);
         });
         return;
