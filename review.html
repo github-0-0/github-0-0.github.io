@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Past Questions | SAT Practice</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body { max-width: 900px; margin: 40px auto; padding: 0 16px; background: #121212; color: #cbcbcb; color-scheme: dark; font: 16px/1.5 Montserrat, sans-serif; }
+    .nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+    a, button { font: inherit; } .nav a, button { border: 1px solid #4b4b4b; border-radius: 6px; padding: 9px 12px; background: #242424; color: #cbcbcb; text-decoration: none; cursor: pointer; }
+    .nav a:hover, button:hover { background: #333; } h1 { margin: 0; } h2 { margin: 0 0 8px; font-size: 1.1rem; } .tabs { display: flex; gap: 8px; margin: 20px 0; } .tabs button[aria-selected="true"] { background: #4b4b4b; }
+    .card { margin: 20px 0; padding: 24px; border: 1px solid #3d3d3d; border-radius: 12px; background: #1b1b1b; } .meta { color: #aaa; font-size: .85rem; } .prompt { margin: 16px 0; } .prompt svg { display: block; max-width: 100%; height: auto; } .prompt svg * { fill: #cbcbcb !important; stroke: #cbcbcb !important; } .prompt table { border-collapse: collapse; max-width: 100%; } .prompt th, .prompt td { border: 1px solid #555; padding: 6px; }
+    .answer { margin: 12px 0 0; padding: 12px; border-radius: 6px; } .your-answer { background: #54232d; } .correct-answer { background: #173f28; } .rationale { white-space: pre-wrap; } .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; } .empty { color: #aaa; } .session { margin: 20px 0; padding: 18px 24px; border: 1px solid #3d3d3d; border-radius: 12px; background: #1b1b1b; } .session summary { cursor: pointer; font-weight: 700; } .session .card { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <nav class="nav" aria-label="Practice navigation">
+    <h1>Past questions</h1>
+    <span>
+      <button type="button" id="reset-lists">Reset saved questions</button>
+      <a href="index2.html">Back to practice</a>
+    </span>
+  </nav>
+  <p>Your sessions, missed questions, and performance data are stored only in this browser.</p>
+  <div class="tabs" role="tablist" aria-label="Past questions">
+    <button type="button" role="tab" id="sessions-tab" aria-controls="list" aria-selected="true">By session</button>
+    <button type="button" role="tab" id="missed-tab" aria-controls="list" aria-selected="false">Missed</button>
+  </div>
+  <main id="list" role="tabpanel" aria-live="polite"></main>
+  <script src="questionbank.js"></script>
+  <script>
+    const rememberedKey = "sat-practice.remembered-question-ids";
+    const missedKey = "sat-practice.missed-question-records";
+    const performanceKey = "sat-practice.question-performance";
+    const sessionsKey = "sat-practice.sessions";
+    const list = document.getElementById("list");
+    const sessionsTab = document.getElementById("sessions-tab");
+    const missedTab = document.getElementById("missed-tab");
+    const resetListsButton = document.getElementById("reset-lists");
+    let activeList = "sessions";
+    const questionsById = new Map(window.getQuestions().map(question => [question.id, question]));
+
+    function stored(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+    }
+    function save(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+    function choicesFor(question) { return question.answers.split(/\n\s*\n/).map(choice => choice.trim()).filter(Boolean); }
+    function performanceFor(id) {
+      const record = stored(performanceKey, {})[id] || {};
+      const attempts = Number(record.attempts) || 0;
+      const correct = Number(record.correct) || 0;
+      const misses = Number(record.misses) || 0;
+      return { attempts, correct, misses, missRate: attempts ? misses / attempts : 0 };
+    }
+    function remove(id) {
+      if (activeList === "remembered") save(rememberedKey, stored(rememberedKey, []).filter(savedId => savedId !== id));
+      else { const records = stored(missedKey, {}); delete records[id]; save(missedKey, records); }
+      render();
+    }
+    function makeCard(question, record) {
+      const card = document.createElement("article"); card.className = "card";
+      const title = document.createElement("h2"); title.textContent = activeList === "missed" ? "Missed question" : "Question";
+      const stats = performanceFor(question.id);
+      const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = `${question.domain} • ${question.skill} • ${question.difficulty} • ${stats.attempts} attempt${stats.attempts === 1 ? "" : "s"} • ${Math.round((stats.attempts ? stats.correct / stats.attempts : 0) * 100)}% correct`;
+      const prompt = document.createElement("div"); prompt.className = "prompt"; prompt.innerHTML = question.question;
+      card.append(title, meta, prompt);
+      if (activeList === "missed") {
+        const choices = choicesFor(question);
+        const selectedChoice = Number(record?.selectedChoice);
+        if (Number.isInteger(selectedChoice) && choices[selectedChoice]) {
+          const selected = document.createElement("div"); selected.className = "answer your-answer"; selected.textContent = `Your answer: ${String.fromCharCode(65 + selectedChoice)}. ${choices[selectedChoice]}`; card.appendChild(selected);
+        }
+        const correct = document.createElement("div"); correct.className = "answer correct-answer"; correct.textContent = `Correct answer: ${String.fromCharCode(65 + question.correct)}. ${choices[question.correct]}`;
+        const rationale = document.createElement("p"); rationale.className = "rationale"; rationale.textContent = question.rationale;
+        card.append(correct, rationale);
+      }
+      if (activeList === "missed") {
+        const actions = document.createElement("div"); actions.className = "actions";
+        const removeButton = document.createElement("button"); removeButton.type = "button"; removeButton.textContent = "Mark reviewed"; removeButton.onclick = () => remove(question.id);
+        actions.appendChild(removeButton); card.appendChild(actions);
+      }
+      return card;
+    }
+    function render() {
+      list.innerHTML = "";
+      if (activeList === "sessions") {
+        const records = stored(sessionsKey, []);
+        const validSessions = Array.isArray(records) ? records : [];
+        if (!validSessions.length) { const empty = document.createElement("p"); empty.className = "empty"; empty.textContent = "No practice sessions yet."; list.appendChild(empty); return; }
+        validSessions.slice().reverse().forEach((session, index) => {
+          const group = document.createElement("details"); group.className = "session"; group.open = index === 0;
+          const summary = document.createElement("summary");
+          const date = new Date(session.startedAt).toLocaleString();
+          const answered = Object.keys(session.answers || {}).length;
+          summary.textContent = `${date} — ${session.score || 0}/${session.questionIds?.length || 0} correct • ${answered} answered${session.timedOut ? " • timed out" : ""}`;
+          group.appendChild(summary);
+          (session.questionIds || []).map(id => questionsById.get(id)).filter(Boolean).forEach(question => group.appendChild(makeCard(question)));
+          list.appendChild(group);
+        });
+        return;
+      }
+      const records = stored(missedKey, {});
+      const ids = Object.keys(records && typeof records === "object" ? records : {});
+      const found = ids.map(id => [questionsById.get(id), records[id]]).filter(([question]) => question);
+      if (activeList === "missed") found.sort(([first], [second]) => {
+        const firstStats = performanceFor(first.id);
+        const secondStats = performanceFor(second.id);
+        return secondStats.missRate - firstStats.missRate || secondStats.misses - firstStats.misses;
+      });
+      if (!found.length) { const empty = document.createElement("p"); empty.className = "empty"; empty.textContent = "No missed questions yet."; list.appendChild(empty); return; }
+      found.forEach(([question, record]) => list.appendChild(makeCard(question, record)));
+    }
+    function selectList(name) { activeList = name; sessionsTab.setAttribute("aria-selected", String(name === "sessions")); missedTab.setAttribute("aria-selected", String(name === "missed")); render(); }
+    sessionsTab.onclick = () => selectList("sessions"); missedTab.onclick = () => selectList("missed"); render();
+    resetListsButton.onclick = () => {
+      if (!window.confirm("Reset all past sessions, missed questions, and performance stats? This cannot be undone.")) return;
+      try { localStorage.removeItem(rememberedKey); localStorage.removeItem(missedKey); localStorage.removeItem(performanceKey); localStorage.removeItem(sessionsKey); } catch {}
+      render();
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Practice Session | SAT Practice</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body { max-width: 900px; margin: 40px auto; padding: 0 16px; background: #121212; color: #cbcbcb; color-scheme: dark; font: 16px/1.5 Montserrat, sans-serif; }
+    .nav, #session-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; } a, button { font: inherit; } .nav a, button { border: 1px solid #4b4b4b; border-radius: 6px; padding: 9px 12px; background: #242424; color: #cbcbcb; text-decoration: none; cursor: pointer; } .nav a:hover, button:hover { background: #333; }
+    #meta, #progress { color: #aaa; font-size: .9rem; } #question { margin: 18px 0; font-size: 1.1rem; } #question svg, .question-copy svg { display: block; max-width: 100%; height: auto; } #question svg *, .question-copy svg * { fill: #cbcbcb !important; stroke: #cbcbcb !important; } #question table, .question-copy table { border-collapse: collapse; max-width: 100%; } #question th, #question td, .question-copy th, .question-copy td { border: 1px solid #555; padding: 6px; }
+    .choice { display: block; width: 100%; margin: 8px 0; padding: 12px; border-radius: 8px; text-align: left; } .correct { background: #1f6e3b; } .wrong { background: #8b2f3f; } #feedback { margin-top: 20px; white-space: pre-wrap; } #next { margin-top: 20px; } .card { margin: 20px 0; padding: 24px; border: 1px solid #3d3d3d; border-radius: 12px; background: #1b1b1b; } .question-copy { margin: 16px 0; } .answer { margin-top: 12px; padding: 12px; border-radius: 6px; } .your-answer { background: #54232d; } .correct-answer { background: #173f28; } .rationale { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <nav class="nav"><h1>Practice session</h1><a href="index2.html">End session</a></nav>
+  <main id="session" hidden>
+    <div id="session-header"><div id="progress"></div><div id="timer"></div></div>
+    <div id="meta"></div><div id="question"></div><div id="answers"></div><div id="feedback"></div><button id="next" type="button">Next</button>
+  </main>
+  <main id="results" hidden><h1>Session results</h1><p id="summary"></p><div id="missed"></div><a href="index2.html">Start a new session</a></main>
+  <p id="message" hidden></p>
+  <script src="questionbank.js"></script>
+  <script>
+    const pendingKey = "sat-practice.pending-session", performanceKey = "sat-practice.question-performance", missedKey = "sat-practice.missed-question-records", rememberedKey = "sat-practice.remembered-question-ids", sessionsKey = "sat-practice.sessions";
+    const sessionBox = document.getElementById("session"), resultsBox = document.getElementById("results"), message = document.getElementById("message"), progress = document.getElementById("progress"), timer = document.getElementById("timer"), meta = document.getElementById("meta"), questionBox = document.getElementById("question"), answersBox = document.getElementById("answers"), feedback = document.getElementById("feedback"), next = document.getElementById("next"), summary = document.getElementById("summary"), missedBox = document.getElementById("missed");
+    function read(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
+    function write(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+    function choicesFor(q) { return q.answers.split(/\n\s*\n/).map(choice => choice.trim()).filter(Boolean); }
+    const questions = window.getQuestions(), byId = new Map(questions.map(q => [q.id, q]));
+    let config; try { config = JSON.parse(sessionStorage.getItem(pendingKey)); sessionStorage.removeItem(pendingKey); } catch {}
+    if (!config || !Array.isArray(config.order) || !config.order.every(id => byId.has(id))) { message.hidden = false; message.textContent = "This practice session is unavailable. Return to the setup page to start a new one."; } else {
+      const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const savedSessions = read(sessionsKey, []), sessions = Array.isArray(savedSessions) ? savedSessions : []; sessions.push({ id: sessionId, startedAt: new Date().toISOString(), questionIds: config.order, answers: {}, score: 0 }); write(sessionsKey, sessions);
+      let index = 0, score = 0, answered = false, buttons = [], misses = [], interval, endsAt = 0;
+      function updateSession(change) { const savedRecords = read(sessionsKey, []), records = Array.isArray(savedRecords) ? savedRecords : [], record = records.find(item => item.id === sessionId); if (record) { change(record); write(sessionsKey, records); } }
+      function remember(id) { const ids = read(rememberedKey, []); if (!ids.includes(id)) { ids.push(id); write(rememberedKey, ids); } }
+      function recordPerformance(id, correct) { const records = read(performanceKey, {}), old = records[id] || {}, attempts = Number(old.attempts) || 0, correctCount = Number(old.correct) || 0, misses = Number(old.misses) || 0, weight = Number(old.weight) || 1; records[id] = { attempts: attempts + 1, correct: correctCount + (correct ? 1 : 0), misses: misses + (correct ? 0 : 1), weight: Math.max(.05, Math.min(100, weight * (correct ? .5 : 1.5))) }; write(performanceKey, records); }
+      function saveMiss(id, selectedChoice) { const records = read(missedKey, {}); records[id] = { selectedChoice, missedAt: new Date().toISOString() }; write(missedKey, records); }
+      function load() { answered = false; buttons = []; const q = byId.get(config.order[index]); remember(q.id); progress.textContent = `Question ${index + 1}/${config.order.length} | Score: ${score}`; meta.textContent = `${q.domain} • ${q.skill} • ${q.difficulty}`; questionBox.innerHTML = q.question; answersBox.innerHTML = ""; feedback.textContent = ""; choicesFor(q).forEach((choice, choiceIndex) => { const button = document.createElement("button"); button.className = "choice"; button.textContent = `${String.fromCharCode(65 + choiceIndex)}. ${choice}`; button.onclick = () => answer(button, choiceIndex); buttons.push(button); answersBox.appendChild(button); }); }
+      function answer(button, choice) { if (answered) return; answered = true; const q = byId.get(config.order[index]), correct = choice === q.correct; recordPerformance(q.id, correct); updateSession(record => { record.answers[q.id] = { selectedChoice: choice, isCorrect: correct, answeredAt: new Date().toISOString() }; record.score = score + (correct ? 1 : 0); }); if (correct) { score++; button.classList.add("correct"); feedback.textContent = `Correct!\n\n${q.rationale}`; } else { misses.push({ q, choice }); saveMiss(q.id, choice); button.classList.add("wrong"); buttons[q.correct]?.classList.add("correct"); feedback.textContent = `Incorrect.\n\nCorrect answer: ${String.fromCharCode(65 + q.correct)}\n\n${q.rationale}`; } }
+      function finish(timedOut) { clearInterval(interval); updateSession(record => { record.endedAt = new Date().toISOString(); record.timedOut = timedOut; record.score = score; }); sessionBox.hidden = true; resultsBox.hidden = false; summary.textContent = `${timedOut ? "Time expired" : "Session complete"}: ${score} of ${config.order.length} correct.`; misses.forEach(({ q, choice }) => { const card = document.createElement("article"); card.className = "card"; const prompt = document.createElement("div"); prompt.className = "question-copy"; prompt.innerHTML = q.question; const selected = document.createElement("div"); selected.className = "answer your-answer"; selected.textContent = `Your answer: ${String.fromCharCode(65 + choice)}. ${choicesFor(q)[choice]}`; const correct = document.createElement("div"); correct.className = "answer correct-answer"; correct.textContent = `Correct answer: ${String.fromCharCode(65 + q.correct)}. ${choicesFor(q)[q.correct]}`; card.append(prompt, selected, correct); missedBox.appendChild(card); }); }
+      next.onclick = () => { index++; index >= config.order.length ? finish(false) : load(); };
+      sessionBox.hidden = false; load(); if (config.timerMinutes) { endsAt = Date.now() + config.timerMinutes * 60000; const tick = () => { const seconds = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)); timer.textContent = `Time: ${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; if (!seconds) finish(true); }; tick(); interval = setInterval(tick, 250); } else timer.textContent = "No timer";
+    }
+  </script>
+</body>
+</html>
